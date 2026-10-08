@@ -10,6 +10,8 @@ full-screen behind the deck.
 Inspired by [qs-wallpaperpicker](https://github.com/dhrruvsharma/qs-wallpaperpicker)
 for Quickshell on Linux.
 
+![Wallpaper Picker: the card deck sorted by colour](docs/screenshot.jpg)
+
 Requires macOS 14 or later.
 
 ## Install
