@@ -79,6 +79,10 @@ wallpaper-picker [--dir=PATH] [--show]
 | `Home` `End` `PgUp` `PgDn` | jump |
 | `Esc` | close |
 
+Right-click a card to set it, favourite it, change its fit, copy its colours,
+show it in Finder or move it to the Trash. Click a colour on the card in front
+to copy its hex code.
+
 ## Notes
 
 - macOS sets a wallpaper for the current Space only. Turn on **Show on all Spaces**

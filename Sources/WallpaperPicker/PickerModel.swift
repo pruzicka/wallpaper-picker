@@ -136,7 +136,14 @@ final class PickerModel {
     private(set) var isOpen = false
     private(set) var fan = Fan(size: CGSize(width: 1920, height: 1200))
     private(set) var backingScale = 2.0
-    var message: String?
+    // A line in place of the key hints: an error, or a short-lived note.
+    struct Notice: Equatable {
+        var text: String
+        var isError: Bool
+    }
+
+    private(set) var notice: Notice?
+    @ObservationIgnored private var noticeSerial = 0
 
     @ObservationIgnored var onClose: (() -> Void)?
     @ObservationIgnored var onChooseFolder: (() -> Void)?
@@ -182,7 +189,7 @@ final class PickerModel {
             ?? displayed.firstIndex(where: { $0.id == lastViewed })
             ?? 0
         currentIndex = displayed.isEmpty ? 0 : target
-        message = nil
+        notice = nil
         peekHeld = false
         peekKept = false
         motion.set(.peek, 0)
@@ -285,7 +292,11 @@ final class PickerModel {
         let clamped = min(max(p, -0.45), Double(displayed.count) - 0.55)
         motion.set(.pos, clamped)
         let i = min(max(Int(clamped.rounded()), 0), displayed.count - 1)
-        if i != currentIndex { currentIndex = i }
+        if i != currentIndex {
+            currentIndex = i
+            // A tick on the trackpad as each card passes the front.
+            NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        }
     }
 
     func beginDrag() {
@@ -308,9 +319,9 @@ final class PickerModel {
         guard let wp = front else { return }
         do {
             try apply(wp)
-            message = nil
+            notice = nil
         } catch {
-            message = "Couldn't set the wallpaper: \(error.localizedDescription)"
+            say("Couldn't set the wallpaper: \(error.localizedDescription)", error: true)
         }
     }
 
@@ -346,13 +357,69 @@ final class PickerModel {
     func cycleFitMode() {
         guard let wp = front else { return }
         let all = FitMode.allCases
-        let next = all[(all.firstIndex(of: library.fitMode(wp))! + 1) % all.count]
-        library.setFitMode(next, for: wp)
-        if library.isCurrent(wp) { applyFront() }
+        setFitMode(all[(all.firstIndex(of: library.fitMode(wp))! + 1) % all.count], for: wp)
+    }
+
+    func setFitMode(_ mode: FitMode, for wp: Wallpaper) {
+        library.setFitMode(mode, for: wp)
+        if library.isCurrent(wp) {
+            do { try apply(wp) } catch { say("Couldn't set the wallpaper: \(error.localizedDescription)", error: true) }
+        }
+    }
+
+    // MARK: Card menu and chips
+
+    func setWallpaper(_ wp: Wallpaper) {
+        if let i = displayed.firstIndex(of: wp) { go(i) }
+        applyFront()
+    }
+
+    func copy(_ text: String, as what: String? = nil) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        say("Copied \(what ?? text)")
+    }
+
+    func copyColours(_ wp: Wallpaper) {
+        guard let s = library.info[wp.key]?.scheme else { return }
+        let lines = [("primary", s.primary), ("secondary", s.secondary), ("tertiary", s.tertiary),
+                     ("container", s.primaryContainer), ("surface", s.surfaceContainerHighest)]
+        copy(lines.map { "\($0.0) \($0.1)" }.joined(separator: "\n"), as: "the colours of \(wp.name)")
+    }
+
+    func reveal(_ wp: Wallpaper) {
+        closeNow()
+        NSWorkspace.shared.activateFileViewerSelecting([wp.url])
+    }
+
+    func trash(_ wp: Wallpaper) {
+        do {
+            try FileManager.default.trashItem(at: wp.url, resultingItemURL: nil)
+            library.scan()
+            say("Moved \(wp.name) to the Trash")
+        } catch {
+            say("Couldn't move \(wp.name) to the Trash: \(error.localizedDescription)", error: true)
+        }
+    }
+
+    func say(_ text: String, error: Bool = false) {
+        notice = Notice(text: text, isError: error)
+        noticeSerial += 1
+        guard !error else { return }
+        let serial = noticeSerial
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            MainActor.assumeIsolated {
+                if self?.noticeSerial == serial { self?.notice = nil }
+            }
+        }
     }
 
     func toggleFavourite() {
         guard let wp = front else { return }
+        toggleFavourite(wp)
+    }
+
+    func toggleFavourite(_ wp: Wallpaper) {
         library.toggleFavourite(wp)
         if source == .favourites {
             rebuild(keep: displayed.indices.contains(currentIndex + 1) ? displayed[currentIndex + 1] : nil)

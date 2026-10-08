@@ -126,6 +126,7 @@ private struct DeckView: View {
                 ForEach(Array(lo...hi), id: \.self) { i in
                     let wp = items[i]
                     CardSlot(
+                        model: model,
                         wallpaper: wp,
                         info: model.library.info[wp.key],
                         placement: fan.place(index: i, pos: pos, deal: deal, peek: peek),
@@ -145,6 +146,7 @@ private struct DeckView: View {
 }
 
 private struct CardSlot: View {
+    let model: PickerModel
     let wallpaper: Wallpaper
     let info: WallpaperInfo?
     let placement: Fan.Placement
@@ -167,11 +169,13 @@ private struct CardSlot: View {
         let lift = hovered && p.near < 0.5 ? 20 * fan.u : 0
         CardFace(wallpaper: wallpaper, info: info, k: k, front: p.near,
                  dim: hovered ? 0 : p.dim, isCurrent: isCurrent, isFavourite: isFavourite,
-                 fitMode: fitMode)
+                 fitMode: fitMode,
+                 onCopy: p.near > 0.6 ? { model.copy($0) } : nil)
             .frame(width: fan.cardW * fan.frontScale, height: fan.cardH * fan.frontScale)
             .contentShape(Rectangle())
             .onHover { hovered = $0 }
             .onTapGesture(perform: onTap)
+            .contextMenu { menu }
             .scaleEffect(p.scale / fan.frontScale)
             .offset(y: -lift)
             .animation(.easeOut(duration: 0.17), value: lift)
@@ -180,6 +184,24 @@ private struct CardSlot: View {
             .opacity(p.opacity)
             .zIndex(p.z)
             .allowsHitTesting(p.opacity > 0.5)
+    }
+}
+
+extension CardSlot {
+    @ViewBuilder
+    var menu: some View {
+        Button(isCurrent ? "On Your Desktop" : "Set as Wallpaper") { model.setWallpaper(wallpaper) }
+            .disabled(isCurrent)
+        Button(isFavourite ? "Remove from Favourites" : "Add to Favourites") { model.toggleFavourite(wallpaper) }
+        Picker("Fit", selection: Binding(get: { fitMode }, set: { model.setFitMode($0, for: wallpaper) })) {
+            ForEach(FitMode.allCases, id: \.self) { Text($0.label).tag($0) }
+        }
+        Divider()
+        Button("Copy Colours") { model.copyColours(wallpaper) }
+            .disabled(info == nil)
+        Button("Show in Finder") { model.reveal(wallpaper) }
+        Divider()
+        Button("Move to Trash", role: .destructive) { model.trash(wallpaper) }
     }
 }
 
@@ -193,6 +215,8 @@ struct CardFace: View {
     let isCurrent: Bool
     let isFavourite: Bool
     let fitMode: FitMode
+    // Set on the card in front: a click on a colour copies its hex code.
+    var onCopy: ((String) -> Void)?
 
     private static let bytes: ByteCountFormatter = {
         let f = ByteCountFormatter()
@@ -243,7 +267,7 @@ struct CardFace: View {
                             .padding(6 * k)
                     }
                 }
-            Chips(scheme: info?.scheme, dress: dress, k: k)
+            Chips(scheme: info?.scheme, dress: dress, k: k, onCopy: onCopy)
                 .padding(.top, 8 * k)
             Text(wallpaper.name)
                 .font(.system(size: 13 * k, weight: .semibold))
@@ -316,6 +340,7 @@ private struct Chips: View {
     let scheme: Scheme?
     let dress: Dress
     let k: Double
+    let onCopy: ((String) -> Void)?
 
     var body: some View {
         let rows: [(String, String)]? = scheme.map {
@@ -339,6 +364,10 @@ private struct Chips: View {
                     .padding(.horizontal, 8 * k)
                     .frame(height: 22 * k)
                     .background(fill.color)
+                    .contentShape(Rectangle())
+                    .onTapGesture { onCopy?(rows[i].1) }
+                    .allowsHitTesting(onCopy != nil)
+                    .help(onCopy == nil ? "" : "Click to copy \(rows[i].1)")
                 } else {
                     // Not read yet: a quiet ramp of the card's own colour.
                     dress.raised.mix(RGB(r: 1, g: 1, b: 1), 0.02 + 0.025 * Double(4 - i)).color
@@ -510,9 +539,11 @@ private struct Chrome: View {
                 .padding(.horizontal, 30 * u)
                 .padding(.top, 12 * u)
 
-            Text(model.message ?? "←→ or scroll browse  ·  Enter set  ·  F favourite  ·  S sort  ·  R random  ·  M fit  ·  Space peek  ·  Tab favourites  ·  Esc close")
+            Text(model.notice?.text ?? "←→ or scroll browse  ·  Enter set  ·  F favourite  ·  S sort  ·  R random  ·  M fit  ·  Space peek  ·  Tab favourites  ·  Esc close")
                 .font(.system(size: 11 * u, weight: .medium))
-                .foregroundStyle(model.message == nil ? dress.muted.color : favouritePink)
+                .foregroundStyle(model.notice?.isError == true ? favouritePink
+                                 : model.notice != nil ? dress.ink.color : dress.muted.color)
+                .animation(.easeOut(duration: 0.2), value: model.notice)
                 .padding(.horizontal, 12 * u)
                 .frame(height: 24 * u)
                 .background(Glass(dress: dress, u: u, opacity: 0.6))
