@@ -87,3 +87,8 @@ Quit the installed app before `./dev.sh`, or both copies will want ⌃⌥W.
 | `Motion.swift` | display-linked animation of the deck |
 | `PickerModel.swift` | the hand's geometry, state, keys and scrolling |
 | `PickerView.swift` | everything on screen |
+
+## Licence
+
+[GPL-3.0](LICENSE), the same as qs-wallpaperpicker, whose design and card
+layout this app is modelled on.
