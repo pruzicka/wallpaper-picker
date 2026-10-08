@@ -59,6 +59,7 @@ wallpaper-picker [--dir=PATH] [--show]
 | `F` | favourite |
 | `S` | sort: name → colour → newest |
 | `R` | random |
+| `M` | fit: fill → fit → stretch → center (remembered per wallpaper) |
 | `Space` | hold to peek, tap to toggle |
 | `Tab` | all / favourites |
 | `Home` `End` `PgUp` `PgDn` | jump |
@@ -70,6 +71,13 @@ wallpaper-picker [--dir=PATH] [--show]
   in System Settings › Wallpaper to have it everywhere.
 - With only the Command Line Tools installed, the build scripts use the macOS 26
   SDK. The macOS 27 SDK's SwiftUI needs a macro plugin that ships only with Xcode.
+
+## Fitting the screen
+
+Each wallpaper remembers how it meets the screen, like the menu in System Settings:
+**Fill** (crop to cover), **Fit** (whole picture, the edges filled with its border
+colour), **Stretch**, or **Center** (its own size). The preview shows the result
+before you set it. Tile isn't offered: macOS has no public way for apps to set it.
 
 ## Development
 

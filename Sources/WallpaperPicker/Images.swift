@@ -18,6 +18,7 @@ enum Store {
     }()
 
     static let favourites = support.appendingPathComponent("favourites.json")
+    static let fitModes = support.appendingPathComponent("fit-modes.json")
 
     static func prepare() {
         for dir in [thumbs, support] {
@@ -50,7 +51,8 @@ enum Analyzer {
         else { return nil }
         let palette = Palette.analyze(thumb)
         return WallpaperInfo(width: Int(size.width), height: Int(size.height),
-                             scheme: palette.scheme, hue: palette.hue, lightness: palette.lightness)
+                             scheme: palette.scheme, hue: palette.hue, lightness: palette.lightness,
+                             edge: palette.edge)
     }
 
     static func pixelSize(_ source: CGImageSource) -> CGSize? {

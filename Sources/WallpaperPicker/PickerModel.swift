@@ -306,19 +306,49 @@ final class PickerModel {
 
     func applyFront() {
         guard let wp = front else { return }
-        let options: [NSWorkspace.DesktopImageOptionKey: Any] = [
-            .imageScaling: NSImageScaling.scaleProportionallyUpOrDown.rawValue,
-            .allowClipping: true,
-        ]
         do {
-            for screen in NSScreen.screens {
-                try NSWorkspace.shared.setDesktopImageURL(wp.url, for: screen, options: options)
-            }
-            library.markCurrent(wp)
+            try apply(wp)
             message = nil
         } catch {
             message = "Couldn't set the wallpaper: \(error.localizedDescription)"
         }
+    }
+
+    private func apply(_ wp: Wallpaper) throws {
+        let mode = library.fitMode(wp)
+        var options: [NSWorkspace.DesktopImageOptionKey: Any] = [:]
+        switch mode {
+        case .fill:
+            options[.imageScaling] = NSImageScaling.scaleProportionallyUpOrDown.rawValue
+            options[.allowClipping] = true
+        case .fit:
+            options[.imageScaling] = NSImageScaling.scaleProportionallyUpOrDown.rawValue
+            options[.allowClipping] = false
+        case .stretch:
+            options[.imageScaling] = NSImageScaling.scaleAxesIndependently.rawValue
+            options[.allowClipping] = true
+        case .center:
+            options[.imageScaling] = NSImageScaling.scaleNone.rawValue
+            options[.allowClipping] = true
+        }
+        if mode.showsEdge {
+            let edge = library.edgeColor(wp)
+            options[.fillColor] = NSColor(srgbRed: edge.r, green: edge.g, blue: edge.b, alpha: 1)
+        }
+        for screen in NSScreen.screens {
+            try NSWorkspace.shared.setDesktopImageURL(wp.url, for: screen, options: options)
+        }
+        library.markCurrent(wp)
+    }
+
+    // Fill → Fit → Stretch → Center for the card in front. On the desktop
+    // already, it changes there at once.
+    func cycleFitMode() {
+        guard let wp = front else { return }
+        let all = FitMode.allCases
+        let next = all[(all.firstIndex(of: library.fitMode(wp))! + 1) % all.count]
+        library.setFitMode(next, for: wp)
+        if library.isCurrent(wp) { applyFront() }
     }
 
     func toggleFavourite() {
@@ -403,6 +433,7 @@ final class PickerModel {
             case "f": toggleFavourite()
             case "s": cycleSort()
             case "r": random()
+            case "m": cycleFitMode()
             default: return false
             }
         }

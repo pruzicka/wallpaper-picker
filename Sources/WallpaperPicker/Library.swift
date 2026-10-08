@@ -21,6 +21,35 @@ struct WallpaperInfo: Codable, Sendable {
     var scheme: Scheme
     var hue: Double?
     var lightness: Double
+    // The colour round the picture's edge (nil in caches from before it).
+    var edge: String?
+}
+
+// How a wallpaper meets the screen, as in System Settings. (Its "Tile"
+// has no public API, so it isn't offered.)
+enum FitMode: String, Codable, CaseIterable, Sendable {
+    case fill, fit, stretch, center
+
+    var label: String {
+        switch self {
+        case .fill: "Fill"
+        case .fit: "Fit"
+        case .stretch: "Stretch"
+        case .center: "Center"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .fill: "rectangle.inset.filled"
+        case .fit: "rectangle.center.inset.filled"
+        case .stretch: "arrow.left.and.right.square"
+        case .center: "square.dashed.inset.filled"
+        }
+    }
+
+    // Leaves screen showing round the picture (filled with its edge colour).
+    var showsEdge: Bool { self == .fit || self == .center }
 }
 
 // The wallpaper folder: what's in it (kept up to date as files come and
@@ -35,6 +64,7 @@ final class Library {
     private(set) var items: [Wallpaper] = []
     private(set) var info: [String: WallpaperInfo] = [:]
     private(set) var favourites: Set<String> = []
+    private(set) var fitModes: [String: FitMode] = [:]
     private(set) var currentPath: String?
 
     @ObservationIgnored var onItemsChanged: (() -> Void)?
@@ -52,6 +82,7 @@ final class Library {
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         }
         favourites = Set(Store.read([String].self, from: Store.favourites) ?? [])
+        fitModes = Store.read([String: FitMode].self, from: Store.fitModes) ?? [:]
         info = Store.read([String: WallpaperInfo].self, from: Store.index) ?? [:]
         refreshCurrent()
         scan()
@@ -94,6 +125,22 @@ final class Library {
             favourites.insert(wp.fileName)
         }
         Store.write(favourites.sorted(), to: Store.favourites)
+    }
+
+    // MARK: Fit
+
+    func fitMode(_ wp: Wallpaper) -> FitMode {
+        fitModes[wp.fileName] ?? .fill
+    }
+
+    func setFitMode(_ mode: FitMode, for wp: Wallpaper) {
+        fitModes[wp.fileName] = mode == .fill ? nil : mode
+        Store.write(fitModes, to: Store.fitModes)
+    }
+
+    // The colour to show round a wallpaper that doesn't cover the screen.
+    func edgeColor(_ wp: Wallpaper) -> RGB {
+        info[wp.key]?.edge.map { RGB(hex: $0) } ?? RGB(r: 0, g: 0, b: 0)
     }
 
     // MARK: Scanning
@@ -158,7 +205,9 @@ final class Library {
     // the desktop first, four at a time.
     private func analyze() {
         analyzeTask?.cancel()
-        var todo = items.filter { info[$0.key] == nil }
+        // Unread, or read before edge colours were (the thumbnails are
+        // cached, so that's quick).
+        var todo = items.filter { info[$0.key]?.edge == nil }
         guard !todo.isEmpty else { return }
         if let i = todo.firstIndex(where: isCurrent) {
             todo.insert(todo.remove(at: i), at: 0)

@@ -174,13 +174,15 @@ enum Palette {
         // The seed's hue, or nil for a wallpaper without real colour.
         var hue: Double?
         var lightness: Double
+        // The average colour round the picture's edge.
+        var edge: String?
     }
 
-    // Reads the seed colour of an image (k-means in Lab, then Material's
-    // scoring: favour colours that are both common and colourful) and
-    // builds its scheme.
-    static func analyze(_ image: CGImage) -> Result {
-        let n = 96
+    private static let sampleSize = 96
+
+    // The image squeezed to 96×96 sRGB pixels (RGBA bytes).
+    private static func sample(_ image: CGImage) -> [UInt8]? {
+        let n = sampleSize
         var pixels = [UInt8](repeating: 0, count: n * n * 4)
         let drawn: Bool = pixels.withUnsafeMutableBytes { buf in
             guard let space = CGColorSpace(name: CGColorSpace.sRGB),
@@ -192,17 +194,44 @@ enum Palette {
             ctx.draw(image, in: CGRect(x: 0, y: 0, width: n, height: n))
             return true
         }
+        return drawn ? pixels : nil
+    }
+
+    // The average of the outer four pixels all round: the colour to fill
+    // the screen with round a picture that doesn't cover it.
+    private static func edge(_ pixels: [UInt8]) -> String {
+        let n = sampleSize, ring = 4
+        var r = 0.0, g = 0.0, b = 0.0, count = 0.0
+        for y in 0..<n {
+            for x in 0..<n where x < ring || y < ring || x >= n - ring || y >= n - ring {
+                let i = (y * n + x) * 4
+                r += Double(pixels[i])
+                g += Double(pixels[i + 1])
+                b += Double(pixels[i + 2])
+                count += 1
+            }
+        }
+        return RGB(r: r / count / 255, g: g / count / 255, b: b / count / 255).hex
+    }
+
+    // Reads the seed colour of an image (k-means in Lab, then Material's
+    // scoring: favour colours that are both common and colourful) and
+    // builds its scheme.
+    static func analyze(_ image: CGImage) -> Result {
+        let n = sampleSize
+        let pixels = sample(image)
         var labs: [Lab] = []
         labs.reserveCapacity(n * n)
-        if drawn {
+        if let pixels {
             for i in stride(from: 0, to: pixels.count, by: 4) where pixels[i + 3] > 250 {
                 labs.append(ColorMath.lab(RGB(r: Double(pixels[i]) / 255,
                                               g: Double(pixels[i + 1]) / 255,
                                               b: Double(pixels[i + 2]) / 255)))
             }
         }
+        let edgeHex = pixels.map(edge)
         guard !labs.isEmpty else {
-            return Result(scheme: .neutral, hue: nil, lightness: 50)
+            return Result(scheme: .neutral, hue: nil, lightness: 50, edge: edgeHex)
         }
 
         let clusters = kMeans(labs, k: 8, iterations: 12)
@@ -227,12 +256,12 @@ enum Palette {
 
         if let seed = best?.lab {
             let source = ColorMath.rgb(l: seed.l, c: seed.chroma, h: seed.hue)
-            return Result(scheme: .make(hue: seed.hue, vividness: 1, source: source), hue: seed.hue, lightness: lightness)
+            return Result(scheme: .make(hue: seed.hue, vividness: 1, source: source), hue: seed.hue, lightness: lightness, edge: edgeHex)
         }
         // No real colour: a near-grey scheme on the dominant cluster's hue.
         let dominant = clusters.max { $0.count < $1.count }!.center
         let source = ColorMath.rgb(l: dominant.l, c: dominant.chroma, h: dominant.hue)
-        return Result(scheme: .make(hue: dominant.hue, vividness: 0.25, source: source), hue: nil, lightness: lightness)
+        return Result(scheme: .make(hue: dominant.hue, vividness: 0.25, source: source), hue: nil, lightness: lightness, edge: edgeHex)
     }
 
     private struct Cluster {

@@ -21,7 +21,11 @@ struct PickerView: View {
                 Color.black
                 BackdropView(wallpaper: model.front,
                              size: CGSize(width: fan.width, height: fan.height),
-                             scale: model.backingScale)
+                             scale: model.backingScale,
+                             mode: model.front.map(model.library.fitMode) ?? .fill,
+                             edge: model.front.map { model.library.edgeColor($0).color } ?? .black,
+                             pixelSize: model.front.flatMap { model.library.info[$0.key] }
+                                 .map { CGSize(width: $0.width, height: $0.height) })
                 Shade(motion: model.motion, fan: fan)
                     .allowsHitTesting(false)
                 BrowseSurface(model: model)
@@ -112,7 +116,8 @@ private struct DeckView: View {
                         placement: fan.place(index: i, pos: pos, deal: deal, peek: peek),
                         fan: fan,
                         isCurrent: model.library.isCurrent(wp),
-                        isFavourite: model.library.isFavourite(wp)
+                        isFavourite: model.library.isFavourite(wp),
+                        fitMode: model.library.fitMode(wp)
                     ) {
                         if i == model.currentIndex { model.applyFront() } else { model.go(i) }
                     }
@@ -131,6 +136,7 @@ private struct CardSlot: View {
     let fan: Fan
     let isCurrent: Bool
     let isFavourite: Bool
+    let fitMode: FitMode
     let onTap: () -> Void
     @State private var hovered = false
 
@@ -141,7 +147,8 @@ private struct CardSlot: View {
         let k = fan.u * fan.frontScale
         let lift = hovered && p.near < 0.5 ? 20 * fan.u : 0
         CardFace(wallpaper: wallpaper, info: info, k: k, front: p.near,
-                 dim: hovered ? 0 : p.dim, isCurrent: isCurrent, isFavourite: isFavourite)
+                 dim: hovered ? 0 : p.dim, isCurrent: isCurrent, isFavourite: isFavourite,
+                 fitMode: fitMode)
             .frame(width: fan.cardW * fan.frontScale, height: fan.cardH * fan.frontScale)
             .contentShape(Rectangle())
             .onHover { hovered = $0 }
@@ -166,6 +173,7 @@ struct CardFace: View {
     let dim: Double
     let isCurrent: Bool
     let isFavourite: Bool
+    let fitMode: FitMode
 
     private static let bytes: ByteCountFormatter = {
         let f = ByteCountFormatter()
@@ -192,6 +200,18 @@ struct CardFace: View {
                 .overlay(alignment: .bottomLeading) {
                     if isCurrent {
                         CurrentTag(k: k, dress: dress).padding(7 * k)
+                    }
+                }
+                .overlay(alignment: .topLeading) {
+                    if fitMode != .fill {
+                        Text(fitMode.label.uppercased())
+                            .font(.system(size: 8.5 * k, weight: .bold))
+                            .tracking(0.8 * k)
+                            .foregroundStyle(.white.opacity(0.92))
+                            .padding(.horizontal, 6 * k)
+                            .frame(height: 17 * k)
+                            .background(RoundedRectangle(cornerRadius: 8.5 * k * cornerScale).fill(.black.opacity(0.5)))
+                            .padding(6 * k)
                     }
                 }
                 .overlay(alignment: .topTrailing) {
@@ -367,6 +387,21 @@ private struct ActionBar: View {
                         .background(Glass(dress: dress, u: u))
                 }
                 .buttonStyle(.plain)
+                let mode = model.library.fitMode(wp)
+                Button { model.cycleFitMode() } label: {
+                    HStack(spacing: 6 * u) {
+                        Image(systemName: mode.symbol)
+                            .font(.system(size: 13 * u, weight: .semibold))
+                        Text(mode.label)
+                            .font(.system(size: 13 * u, weight: .semibold))
+                    }
+                    .foregroundStyle(dress.ink.color)
+                    .padding(.horizontal, 12 * u)
+                    .frame(height: 40 * u)
+                    .background(Glass(dress: dress, u: u))
+                }
+                .buttonStyle(.plain)
+                .help("How it fits the screen (M)")
                 Button { model.applyFront() } label: {
                     HStack(spacing: 8 * u) {
                         Image(systemName: current ? "checkmark.circle.fill" : "photo.on.rectangle")
@@ -440,7 +475,7 @@ private struct Chrome: View {
                 Segments(dress: dress, u: u, items: [
                     Segment(label: "All \(model.library.items.count)", symbol: "photo.stack",
                             selected: model.source == .all) { model.setSource(.all) },
-                    Segment(label: "Favourites \(model.library.favourites.count)", symbol: "heart",
+                    Segment(label: "Favourites \(model.library.items.filter(model.library.isFavourite).count)", symbol: "heart",
                             selected: model.source == .favourites) { model.setSource(.favourites) },
                 ])
             }
@@ -452,7 +487,7 @@ private struct Chrome: View {
                 .padding(.horizontal, 30 * u)
                 .padding(.top, 12 * u)
 
-            Text(model.message ?? "←→ or scroll browse  ·  Enter set  ·  F favourite  ·  S sort  ·  R random  ·  Space peek  ·  Tab favourites  ·  Esc close")
+            Text(model.message ?? "←→ or scroll browse  ·  Enter set  ·  F favourite  ·  S sort  ·  R random  ·  M fit  ·  Space peek  ·  Tab favourites  ·  Esc close")
                 .font(.system(size: 11 * u, weight: .medium))
                 .foregroundStyle(model.message == nil ? dress.muted.color : favouritePink)
                 .padding(.horizontal, 12 * u)
@@ -739,6 +774,10 @@ private struct BackdropView: View {
     let wallpaper: Wallpaper?
     let size: CGSize
     let scale: Double
+    // Shown as it will be on the desktop.
+    let mode: FitMode
+    let edge: Color
+    let pixelSize: CGSize?
 
     private struct Layer: Identifiable {
         let id = UUID()
@@ -751,13 +790,10 @@ private struct BackdropView: View {
 
     var body: some View {
         ZStack {
+            edge.opacity(mode.showsEdge ? 1 : 0)
             ForEach(layers) { layer in
-                Image(nsImage: layer.image)
-                    .resizable()
-                    .interpolation(.high)
-                    .scaledToFill()
-                    .frame(width: size.width, height: size.height)
-                    .clipped()
+                placed(Image(nsImage: layer.image).resizable().interpolation(.high),
+                       natural: pixelSize ?? layer.image.size)
                     .transition(.asymmetric(
                         insertion: layer.full ? .opacity : .opacity.combined(with: .scale(scale: 1.035)),
                         removal: .identity))
@@ -765,6 +801,7 @@ private struct BackdropView: View {
         }
         .frame(width: size.width, height: size.height)
         .clipped()
+        .animation(.easeOut(duration: 0.3), value: mode)
         .task(id: wallpaper?.key) {
             guard let wp = wallpaper else {
                 layers = []
@@ -783,6 +820,24 @@ private struct BackdropView: View {
             guard !Task.isCancelled else { return }
             guard let full = await PreviewCache.shared.load(wp, pixels: pixels), !Task.isCancelled else { return }
             show(wp, full, full: layers.last?.key == wp.key)
+        }
+    }
+
+    // Placed the way the desktop will place it. Centre draws the picture
+    // at its own size, one image pixel to a point.
+    @ViewBuilder
+    private func placed(_ image: Image, natural: CGSize) -> some View {
+        switch mode {
+        case .fill:
+            image.scaledToFill().frame(width: size.width, height: size.height).clipped()
+        case .fit:
+            image.scaledToFit().frame(width: size.width, height: size.height)
+        case .stretch:
+            image.frame(width: size.width, height: size.height)
+        case .center:
+            image.frame(width: natural.width, height: natural.height)
+                .frame(width: size.width, height: size.height)
+                .clipped()
         }
     }
 
