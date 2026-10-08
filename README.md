@@ -1,3 +1,5 @@
+<img src="Resources/AppIcon.png" width="128" alt="">
+
 # Wallpaper Picker
 
 A wallpaper picker for macOS. Your wallpapers are paint-chip cards fanned out
