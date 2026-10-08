@@ -6,6 +6,11 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+case "${1:-}" in
+    "" | --install) ;;
+    *) echo "Unknown option: $1 (use --install or nothing)" >&2; exit 2 ;;
+esac
+
 VERSION=0.2
 BUNDLE_ID=io.github.pruzicka.WallpaperPicker # must match AppInfo.bundleID
 
@@ -18,7 +23,10 @@ if [[ -z "${SDKROOT:-}" ]] && ! xcode-select -p | grep -q Xcode.app; then
     done
 fi
 
-swift build -c release
+# SwiftPM points the linker at two Command Line Tools folders that don't
+# exist; the "search path not found" warnings about them are harmless.
+# (pipefail still stops the script if the build itself fails.)
+swift build -c release 2>&1 | { grep -v "ld: warning: search path '/Library/Developer/CommandLineTools/Developer" || true; }
 
 APP=build/WallpaperPicker.app
 rm -rf "$APP"
