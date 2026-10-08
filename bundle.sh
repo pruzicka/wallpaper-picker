@@ -11,7 +11,7 @@ case "${1:-}" in
     *) echo "Unknown option: $1 (use --install or nothing)" >&2; exit 2 ;;
 esac
 
-VERSION=0.2.0
+VERSION=0.3.0
 BUNDLE_ID=io.github.pruzicka.WallpaperPicker # must match AppInfo.bundleID
 
 # SwiftPM points the linker at two Command Line Tools folders that don't
