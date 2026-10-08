@@ -11,27 +11,19 @@ case "${1:-}" in
     *) echo "Unknown option: $1 (use --install or nothing)" >&2; exit 2 ;;
 esac
 
-VERSION=0.2
+VERSION=0.2.0
 BUNDLE_ID=io.github.pruzicka.WallpaperPicker # must match AppInfo.bundleID
-
-# The macOS 27 SDK's SwiftUI needs a macro plugin that only ships with
-# Xcode; with just the Command Line Tools, build against the newest SDK
-# that doesn't (the app still runs on the current macOS).
-if [[ -z "${SDKROOT:-}" ]] && ! xcode-select -p | grep -q Xcode.app; then
-    for sdk in /Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk /Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk; do
-        if [[ -d "$sdk" ]]; then export SDKROOT="$sdk"; break; fi
-    done
-fi
 
 # SwiftPM points the linker at two Command Line Tools folders that don't
 # exist; the "search path not found" warnings about them are harmless.
 # (pipefail still stops the script if the build itself fails.)
-swift build -c release 2>&1 | { grep -v "ld: warning: search path '/Library/Developer/CommandLineTools/Developer" || true; }
+# SWIFT_BUILD_FLAGS: extra flags, e.g. --disable-sandbox under Homebrew.
+swift build -c release ${SWIFT_BUILD_FLAGS:-} 2>&1 | { grep -v "ld: warning: search path '/Library/Developer/CommandLineTools/Developer" || true; }
 
 APP=build/WallpaperPicker.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$(swift build -c release --show-bin-path)/WallpaperPicker" "$APP/Contents/MacOS/"
+cp "$(swift build -c release ${SWIFT_BUILD_FLAGS:-} --show-bin-path)/WallpaperPicker" "$APP/Contents/MacOS/"
 
 # The icon: every size macOS asks for, from the 1024 px master
 # (redraw it with `swift scripts/make-icon.swift Resources/AppIcon.png`).

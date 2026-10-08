@@ -7,8 +7,10 @@ like a hand along the foot of the screen. Each card wears the Material-style
 colour scheme read from its picture, and the card in front is previewed
 full-screen behind the deck.
 
-Inspired by [qs-wallpaperpicker](https://github.com/dhrruvsharma/qs-wallpaperpicker)
-for Quickshell on Linux.
+Inspired by [qs-wallpaperpicker](https://github.com/dhrruvsharma/qs-wallpaperpicker),
+a wallpaper picker for Quickshell on Hyprland by
+[u/dhruvsha](https://www.reddit.com/user/dhruvsha/). I saw it on Reddit and made
+this macOS version. All credit for the idea and the design goes to them.
 
 ![Wallpaper Picker: the card deck sorted by colour](docs/screenshot.jpg)
 
@@ -69,8 +71,6 @@ wallpaper-picker [--dir=PATH] [--show]
 
 - macOS sets a wallpaper for the current Space only. Turn on **Show on all Spaces**
   in System Settings › Wallpaper to have it everywhere.
-- With only the Command Line Tools installed, the build scripts use the macOS 26
-  SDK. The macOS 27 SDK's SwiftUI needs a macro plugin that ships only with Xcode.
 
 ## Fitting the screen
 

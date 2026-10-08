@@ -4,6 +4,17 @@ import SwiftUI
 let cornerScale = 0.4
 let favouritePink = Color(red: 1, green: 0.36, blue: 0.48)
 
+// View-local state. In the macOS 27 SDK SwiftUI's @State is a macro whose
+// plugin ships only with Xcode; a @StateObject box builds with just the
+// Command Line Tools, on any SDK.
+final class Local<Value>: ObservableObject {
+    @Published var value: Value
+
+    init(_ value: Value) {
+        self.value = value
+    }
+}
+
 extension RGB {
     var color: Color { Color(.sRGB, red: r, green: g, blue: b) }
     func color(_ opacity: Double) -> Color { Color(.sRGB, red: r, green: g, blue: b, opacity: opacity) }
@@ -71,7 +82,11 @@ private struct Shade: View {
 // Drag anywhere to browse; click the picture to peek.
 private struct BrowseSurface: View {
     let model: PickerModel
-    @State private var dragging = false
+    @StateObject private var draggingBox = Local<Bool>(false)
+    private var dragging: Bool {
+        get { draggingBox.value }
+        nonmutating set { draggingBox.value = newValue }
+    }
 
     var body: some View {
         Color.clear
@@ -138,7 +153,11 @@ private struct CardSlot: View {
     let isFavourite: Bool
     let fitMode: FitMode
     let onTap: () -> Void
-    @State private var hovered = false
+    @StateObject private var hoveredBox = Local<Bool>(false)
+    private var hovered: Bool {
+        get { hoveredBox.value }
+        nonmutating set { hoveredBox.value = newValue }
+    }
 
     var body: some View {
         let p = placement
@@ -334,12 +353,16 @@ private struct Chips: View {
 struct ThumbImage: View {
     let wallpaper: Wallpaper
     let placeholder: Color
-    @State private var image: NSImage?
+    @StateObject private var imageBox: Local<NSImage?>
+    private var image: NSImage? {
+        get { imageBox.value }
+        nonmutating set { imageBox.value = newValue }
+    }
 
     init(wallpaper: Wallpaper, placeholder: Color) {
         self.wallpaper = wallpaper
         self.placeholder = placeholder
-        _image = State(initialValue: ThumbCache.shared.cached(wallpaper))
+        _imageBox = StateObject(wrappedValue: Local(ThumbCache.shared.cached(wallpaper)))
     }
 
     var body: some View {
@@ -604,9 +627,21 @@ private struct RibbonView: View {
     let model: PickerModel
     let dress: Dress
     let u: Double
-    @State private var hoverX: Double?
-    @State private var dragging = false
-    @State private var width = 1.0
+    @StateObject private var hoverXBox = Local<Double?>(nil)
+    private var hoverX: Double? {
+        get { hoverXBox.value }
+        nonmutating set { hoverXBox.value = newValue }
+    }
+    @StateObject private var draggingBox = Local<Bool>(false)
+    private var dragging: Bool {
+        get { draggingBox.value }
+        nonmutating set { draggingBox.value = newValue }
+    }
+    @StateObject private var widthBox = Local<Double>(1)
+    private var width: Double {
+        get { widthBox.value }
+        nonmutating set { widthBox.value = newValue }
+    }
 
     var body: some View {
         let items = model.displayed
@@ -786,7 +821,11 @@ private struct BackdropView: View {
         let full: Bool
     }
 
-    @State private var layers: [Layer] = []
+    @StateObject private var layersBox = Local<[Layer]>([])
+    private var layers: [Layer] {
+        get { layersBox.value }
+        nonmutating set { layersBox.value = newValue }
+    }
 
     var body: some View {
         ZStack {
