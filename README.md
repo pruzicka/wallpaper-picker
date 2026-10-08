@@ -18,7 +18,19 @@ Requires macOS 14 or later.
 
 ## Install
 
-No Xcode needed: the Command Line Tools are enough (`xcode-select --install`).
+With [Homebrew](https://brew.sh):
+
+```sh
+brew install pruzicka/tap/wallpaper-picker
+open $(brew --prefix)/opt/wallpaper-picker/WallpaperPicker.app
+```
+
+If Homebrew says the tap isn't trusted yet, run
+`brew trust --formula pruzicka/tap/wallpaper-picker` first. The formula builds the
+app from source (about a minute), so macOS doesn't block it and no notarization
+is needed.
+
+Or from a clone, with nothing but the Command Line Tools (`xcode-select --install`):
 
 ```sh
 ./bundle.sh --install
