@@ -33,6 +33,8 @@ enum Store {
 
     static func write<T: Encodable>(_ value: T, to url: URL) {
         guard let data = try? JSONEncoder().encode(value) else { return }
+        // The system may have cleared the caches while the app was running.
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: url, options: .atomic)
     }
 }
@@ -90,6 +92,7 @@ enum Analyzer {
         let maxPixel = min(1600, max(64, Int((max(size.width, size.height) * need).rounded(.up))))
         guard let image = downsample(source, maxPixel: maxPixel) else { return nil }
         let target = thumbURL(wp)
+        try? FileManager.default.createDirectory(at: Store.thumbs, withIntermediateDirectories: true)
         let temp = Store.thumbs.appendingPathComponent(UUID().uuidString + ".tmp")
         if let dest = CGImageDestinationCreateWithURL(temp as CFURL, UTType.jpeg.identifier as CFString, 1, nil) {
             CGImageDestinationAddImage(dest, image, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)

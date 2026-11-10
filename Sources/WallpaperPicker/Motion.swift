@@ -1,5 +1,6 @@
 import AppKit
 import Observation
+import os
 import QuartzCore
 
 enum Ease {
@@ -37,11 +38,19 @@ final class Motion {
     @ObservationIgnored private var link: CADisplayLink?
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private lazy var proxy = LinkProxy(motion: self)
-    // The view whose screen paces the frames.
+    // Timer beats since the display last sent a frame.
+    @ObservationIgnored private var missed = 0
+    @ObservationIgnored private var linkFailed = false
+    @ObservationIgnored private let log = Logger(subsystem: AppInfo.bundleID, category: "motion")
+    // The view whose screen paces the frames. Setting it (again) starts
+    // a fresh display link.
     @ObservationIgnored weak var view: NSView? {
         didSet {
             link?.invalidate()
             link = nil
+            linkFailed = false
+            timer?.invalidate()
+            timer = nil
         }
     }
 
@@ -80,19 +89,46 @@ final class Motion {
     }
 
     private func run() {
-        if let view, link == nil {
+        if let view, link == nil, !linkFailed {
             let l = view.displayLink(target: proxy, selector: #selector(LinkProxy.tick))
             l.add(to: .main, forMode: .common)
             link = l
         }
-        if let link {
+        if let link, link.isPaused {
             link.isPaused = false
-        } else if timer == nil {
-            timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 120, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated { self?.tick() }
-            }
-            RunLoop.main.add(timer!, forMode: .common)
+            missed = 0
         }
+        // The display paces the frames; a timer does when there is no
+        // display link, and watches over the link when there is one.
+        if timer == nil {
+            let t = Timer(timeInterval: link == nil ? 1.0 / 120 : 1.0 / 30, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.beat() }
+            }
+            RunLoop.main.add(t, forMode: .common)
+            timer = t
+        }
+    }
+
+    private func beat() {
+        guard link != nil else { return tick() }
+        missed += 1
+        guard missed >= 3 else { return }
+        // A display link can go quiet for good after the screens sleep or
+        // change, which left the picker open but invisible. Carry on by
+        // timer; the next opening tries a new link.
+        log.error("Display link sent no frames; animating by timer")
+        link?.invalidate()
+        link = nil
+        linkFailed = true
+        timer?.invalidate()
+        timer = nil
+        tick()
+        if !tweens.isEmpty { run() }
+    }
+
+    fileprivate func linkTick() {
+        missed = 0
+        tick()
     }
 
     fileprivate func tick() {
@@ -123,6 +159,6 @@ private final class LinkProxy: NSObject {
     }
 
     @objc func tick(_ link: CADisplayLink) {
-        MainActor.assumeIsolated { motion?.tick() }
+        MainActor.assumeIsolated { motion?.linkTick() }
     }
 }

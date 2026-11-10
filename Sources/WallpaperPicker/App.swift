@@ -126,6 +126,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         else { return }
         let panel = self.panel ?? makePanel()
         panel.setFrame(screen.frame, display: false)
+        // A new display link each time: an old one may not outlive the
+        // screens sleeping or changing.
+        model.motion.view = panel.contentView
         model.configure(size: screen.frame.size, scale: screen.backingScaleFactor)
         model.open()
         panel.orderFrontRegardless()
