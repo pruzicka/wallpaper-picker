@@ -111,7 +111,18 @@ final class Library {
         scan()
     }
 
-    private var folderKey: String { folder.standardizedFileURL.path }
+    // The folder as the disk spells it, so ~/Pictures/Wallpapers and
+    // ~/pictures/wallpapers (or a link to it) share their favourites.
+    private var folderKey: String { Self.canonicalPath(folder) }
+
+    nonisolated static func canonicalPath(_ url: URL) -> String {
+        let fd = open(url.path, O_EVTONLY)
+        guard fd >= 0 else { return url.standardizedFileURL.path }
+        defer { close(fd) }
+        var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+        guard fcntl(fd, F_GETPATH, &buffer) != -1 else { return url.standardizedFileURL.path }
+        return String(cString: buffer)
+    }
 
     // MARK: Current wallpaper
 
@@ -205,12 +216,17 @@ final class Library {
     // Kept per folder since 0.4; before, one list for whichever folder
     // was in use, which becomes that folder's.
     private func loadSettings() {
-        allFavourites = Self.migrated(Store.read([String: [String]].self, from: Store.favourites),
-                                      legacy: Store.read([String].self, from: Store.legacyFavourites),
-                                      folder: folderKey)
-        allFitModes = Self.migrated(Store.read([String: [String: FitMode]].self, from: Store.fitModes),
-                                    legacy: Store.read([String: FitMode].self, from: Store.legacyFitModes),
-                                    folder: folderKey)
+        let canonical = { (path: String) in Self.canonicalPath(URL(fileURLWithPath: path, isDirectory: true)) }
+        allFavourites = Self.rekeyed(
+            Self.migrated(Store.read([String: [String]].self, from: Store.favourites),
+                          legacy: Store.read([String].self, from: Store.legacyFavourites),
+                          folder: folderKey),
+            by: canonical) { Array(Set($0).union($1)).sorted() }
+        allFitModes = Self.rekeyed(
+            Self.migrated(Store.read([String: [String: FitMode]].self, from: Store.fitModes),
+                          legacy: Store.read([String: FitMode].self, from: Store.legacyFitModes),
+                          folder: folderKey),
+            by: canonical) { $0.merging($1) { first, _ in first } }
         for (legacy, current, write) in [
             (Store.legacyFavourites, Store.favourites, { Store.write(self.allFavourites, to: Store.favourites) }),
             (Store.legacyFitModes, Store.fitModes, { Store.write(self.allFitModes, to: Store.fitModes) }),
@@ -220,6 +236,17 @@ final class Library {
         }
         favourites = Set(allFavourites[folderKey] ?? [])
         fitModes = allFitModes[folderKey] ?? [:]
+    }
+
+    // Saved under each folder's own spelling (before it was looked up on
+    // disk): the same folder spelt twice becomes one.
+    nonisolated static func rekeyed<V>(_ saved: [String: V], by canonical: (String) -> String,
+                                       merge: (V, V) -> V) -> [String: V] {
+        saved.keys.sorted().reduce(into: [:]) { result, key in
+            let value = saved[key]!
+            let folder = canonical(key)
+            result[folder] = result[folder].map { merge($0, value) } ?? value
+        }
     }
 
     nonisolated static func migrated<V>(_ current: [String: V]?, legacy: V?, folder: String) -> [String: V] {
@@ -232,11 +259,10 @@ final class Library {
 
     func scan() {
         let keys: [URLResourceKey] = [.isRegularFileKey, .contentModificationDateKey, .fileSizeKey]
-        let root = folderKey
         var found: [Wallpaper] = []
         let walker = FileManager.default.enumerator(
             at: folder, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles, .skipsPackageDescendants])
-        while let url = walker?.nextObject() as? URL {
+        while let walker, let url = walker.nextObject() as? URL {
             guard Self.extensions.contains(url.pathExtension.lowercased()) else { continue }
             let resolved = url.resolvingSymlinksInPath()
             guard let values = try? resolved.resourceValues(forKeys: Set(keys)),
@@ -245,7 +271,7 @@ final class Library {
             let modified = values.contentModificationDate ?? .distantPast
             let size = Int64(values.fileSize ?? 0)
             found.append(Wallpaper(url: resolved, fileName: url.lastPathComponent,
-                                   relativePath: Self.relativePath(of: url.standardizedFileURL.path, in: root),
+                                   relativePath: Self.relativePath(url, level: walker.level),
                                    fileSize: size, modified: modified, key: Self.key(resolved.path, modified, size)))
         }
         found.sort { $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending }
@@ -261,9 +287,11 @@ final class Library {
         analyze()
     }
 
-    nonisolated static func relativePath(of path: String, in root: String) -> String {
-        let base = root.hasSuffix("/") ? root : root + "/"
-        return path.hasPrefix(base) ? String(path.dropFirst(base.count)) : (path as NSString).lastPathComponent
+    // A file `level` folders down (1: in the folder itself), from the
+    // walker's own count rather than comparing paths, which can differ in
+    // case or links and still be the same folder.
+    nonisolated static func relativePath(_ url: URL, level: Int) -> String {
+        url.pathComponents.suffix(max(1, level)).joined(separator: "/")
     }
 
     nonisolated static func collection(of relativePath: String) -> String? {

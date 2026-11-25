@@ -4,10 +4,35 @@ import Testing
 
 @Suite struct LibraryTests {
     @Test func relativePaths() {
-        #expect(Library.relativePath(of: "/w/lake.jpg", in: "/w") == "lake.jpg")
-        #expect(Library.relativePath(of: "/w/Nature/lake.jpg", in: "/w/") == "Nature/lake.jpg")
-        // Not under the folder: just the name.
-        #expect(Library.relativePath(of: "/wx/lake.jpg", in: "/w") == "lake.jpg")
+        #expect(Library.relativePath(URL(fileURLWithPath: "/w/lake.jpg"), level: 1) == "lake.jpg")
+        #expect(Library.relativePath(URL(fileURLWithPath: "/w/Nature/lake.jpg"), level: 2) == "Nature/lake.jpg")
+        #expect(Library.relativePath(URL(fileURLWithPath: "/w/Nature/Lakes/one.jpg"), level: 3) == "Nature/Lakes/one.jpg")
+    }
+
+    // The bug: the folder chosen as ~/Pictures/Wallpapers, on disk
+    // ~/Pictures/wallpapers, lost its subfolders.
+    @Test func scanFindsSubfoldersWhateverTheCase() throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("wp-\(UUID().uuidString)")
+        let real = base.appendingPathComponent("walls/Nature", isDirectory: true)
+        try FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        FileManager.default.createFile(atPath: real.appendingPathComponent("lake.jpg").path, contents: Data([1]))
+        let spelt = base.appendingPathComponent("WALLS", isDirectory: true)
+        let walker = FileManager.default.enumerator(at: spelt, includingPropertiesForKeys: nil)!
+        var found: [String] = []
+        while let url = walker.nextObject() as? URL {
+            if url.pathExtension == "jpg" { found.append(Library.relativePath(url, level: walker.level)) }
+        }
+        #expect(found == ["Nature/lake.jpg"])
+        #expect(Library.collection(of: found[0]) == "Nature")
+        #expect(Library.canonicalPath(spelt).hasSuffix("/walls"))
+    }
+
+    @Test func sameFolderSpeltTwiceMerges() {
+        let lower = { (p: String) in p.lowercased() }
+        let merged = Library.rekeyed(["/P/Walls": ["a.jpg"], "/p/walls": ["b.jpg", "a.jpg"], "/x": ["c.jpg"]],
+                                     by: lower) { Array(Set($0).union($1)).sorted() }
+        #expect(merged == ["/p/walls": ["a.jpg", "b.jpg"], "/x": ["c.jpg"]])
     }
 
     @Test func collections() {
