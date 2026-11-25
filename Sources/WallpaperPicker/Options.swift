@@ -4,6 +4,9 @@ enum AppInfo {
     static let bundleID = "io.github.pruzicka.WallpaperPicker"
     // Commands from the command line to the copy already running.
     static let commandNotification = Notification.Name(bundleID + ".command")
+    // From the bundle (bundle.sh writes it); a build run from .build has none.
+    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+    static let homepage = URL(string: "https://github.com/pruzicka/wallpaper-picker")!
 }
 
 // Command-line options, e.g. `wallpaper-picker --dir=~/Pictures/Wallpapers`.
@@ -33,11 +36,13 @@ struct Options: Equatable {
           --hotkey=KEYS      The shortcut that opens the picker, e.g. ctrl+opt+w,
                              cmd+shift+space or f5 (ctrl, opt, shift, cmd; a-z, 0-9,
                              space, f1-f12)
+          --version          Show the version
           --help             Show this help
         """
 
     enum ParseError: Error, Equatable {
         case help
+        case version
         case message(String)
     }
 
@@ -54,6 +59,8 @@ struct Options: Equatable {
             switch arg {
             case "--help", "-h":
                 return .failure(.help)
+            case "--version", "-v":
+                return .failure(.version)
             case "--show":
                 options.show = true
             case "--random":

@@ -12,6 +12,9 @@ case .success(let parsed):
 case .failure(.help):
     print(Options.usage)
     exit(0)
+case .failure(.version):
+    print("Wallpaper Picker \(AppInfo.version)")
+    exit(0)
 case .failure(.message(let message)):
     fail(message + "\n\n" + Options.usage, code: 2)
 }

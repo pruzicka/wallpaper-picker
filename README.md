@@ -90,6 +90,7 @@ wallpaper-picker [--dir=PATH] [--show] [--set=FILE | --random [--favourites]]
   --rotate=INTERVAL  Change the wallpaper by itself: off, 15m, 1h, 3h or 1d
   --hotkey=KEYS      The shortcut that opens the picker, e.g. ctrl+opt+w,
                      cmd+shift+space or f5
+  --version          Show the version
   --help             Show this help
 ```
 

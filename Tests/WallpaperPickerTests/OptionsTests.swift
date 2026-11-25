@@ -79,6 +79,7 @@ import Testing
     @Test func unknown() {
         #expect(error("--nope") == "Unknown option: --nope")
         if case .failure(.help) = parse("--help") {} else { Issue.record("--help") }
+        if case .failure(.version) = parse("--version") {} else { Issue.record("--version") }
     }
 
     // A cold start gets the same command as a running app.

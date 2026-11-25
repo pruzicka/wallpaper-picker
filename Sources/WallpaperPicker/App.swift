@@ -249,6 +249,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let menu = NSMenu()
         menu.delegate = self
 
+        menu.addItem(NSMenuItem(title: "About Wallpaper Picker", action: #selector(about), keyEquivalent: ""))
+        menu.addItem(.separator())
         let showItem = NSMenuItem(title: "Show Wallpaper Picker", action: #selector(show), keyEquivalent: "")
         menu.addItem(showItem)
         self.showItem = showItem
@@ -305,6 +307,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             entry.state = interval == rotation.interval ? .on : .off
         }
         favouritesOnlyItem?.state = rotation.favouritesOnly ? .on : .off
+    }
+
+    @objc func about() {
+        model.closeNow()
+        let credits = NSMutableAttributedString()
+        let font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+        let centred = NSMutableParagraphStyle()
+        centred.alignment = .center
+        func add(_ text: String, link: URL? = nil) {
+            var attributes: [NSAttributedString.Key: Any] = [
+                .font: font, .paragraphStyle: centred, .foregroundColor: NSColor.secondaryLabelColor,
+            ]
+            if let link { attributes[.link] = link }
+            credits.append(NSAttributedString(string: text, attributes: attributes))
+        }
+        add("github.com/pruzicka/wallpaper-picker", link: AppInfo.homepage)
+        add("\nAfter ")
+        add("qs-wallpaperpicker", link: URL(string: "https://github.com/dhrruvsharma/qs-wallpaperpicker"))
+        add(" by u/dhruvsha")
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.orderFrontStandardAboutPanel(options: [
+            .applicationName: "Wallpaper Picker",
+            .applicationVersion: AppInfo.version,
+            .version: "", // no build number in brackets
+            .credits: credits,
+        ])
     }
 
     @objc func nextWallpaper() {
