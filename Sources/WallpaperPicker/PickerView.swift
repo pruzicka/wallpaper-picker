@@ -524,12 +524,7 @@ private struct Chrome: View {
                     IconButton(symbol: "eye", dress: dress, u: u) { model.togglePeek() }
                     IconButton(symbol: "xmark", dress: dress, u: u) { model.close() }
                 }
-                Segments(dress: dress, u: u, items: [
-                    Segment(label: "All \(model.library.items.count)", symbol: "photo.stack",
-                            selected: model.source == .all) { model.setSource(.all) },
-                    Segment(label: "Favourites \(model.library.items.filter(model.library.isFavourite).count)", symbol: "heart",
-                            selected: model.source == .favourites) { model.setSource(.favourites) },
-                ])
+                Segments(dress: dress, u: u, items: sourceSegments)
             }
             .frame(height: 40 * u)
             .padding(.horizontal, 30 * u)
@@ -539,7 +534,7 @@ private struct Chrome: View {
                 .padding(.horizontal, 30 * u)
                 .padding(.top, 12 * u)
 
-            Text(model.notice?.text ?? "←→ or scroll browse  ·  Enter set  ·  F favourite  ·  S sort  ·  R random  ·  M fit  ·  Space peek  ·  Tab favourites  ·  Esc close")
+            Text(model.notice?.text ?? "←→ or scroll browse  ·  Enter set  ·  F favourite  ·  S sort  ·  R random  ·  M fit  ·  Space peek  ·  Tab \(model.library.collections.isEmpty ? "favourites" : "collections")  ·  Esc close")
                 .font(.system(size: 11 * u, weight: .medium))
                 .foregroundStyle(model.notice?.isError == true ? favouritePink
                                  : model.notice != nil ? dress.ink.color : dress.muted.color)
@@ -552,6 +547,29 @@ private struct Chrome: View {
         }
         .animation(.easeOut(duration: 0.42), value: dress)
         .modifier(PeekFade(motion: model.motion))
+    }
+}
+
+extension Chrome {
+    // All, Favourites, and the subfolders (one menu for them all).
+    var sourceSegments: [Segment] {
+        let library = model.library
+        var segments = [
+            Segment(label: "All \(library.items.count)", symbol: "photo.stack",
+                    selected: model.source == .all) { model.setSource(.all) },
+            Segment(label: "Favourites \(library.items.filter(library.isFavourite).count)", symbol: "heart",
+                    selected: model.source == .favourites) { model.setSource(.favourites) },
+        ]
+        if !library.collections.isEmpty {
+            if case .collection(let name) = model.source {
+                segments.append(Segment(label: "\(name) \(library.items.filter { $0.collection == name }.count)",
+                                        symbol: "folder.fill", selected: true) { model.chooseCollection() })
+            } else {
+                segments.append(Segment(label: "Folders \(library.collections.count)", symbol: "folder",
+                                        selected: false) { model.chooseCollection() })
+            }
+        }
+        return segments
     }
 }
 

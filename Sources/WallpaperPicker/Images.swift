@@ -17,8 +17,12 @@ enum Store {
         return base.appendingPathComponent("WallpaperPicker", isDirectory: true)
     }()
 
-    static let favourites = support.appendingPathComponent("favourites.json")
-    static let fitModes = support.appendingPathComponent("fit-modes.json")
+    // For each wallpaper folder.
+    static let favourites = support.appendingPathComponent("favourites-v2.json")
+    static let fitModes = support.appendingPathComponent("fit-modes-v2.json")
+    // One list for whichever folder was in use (before 0.4).
+    static let legacyFavourites = support.appendingPathComponent("favourites.json")
+    static let legacyFitModes = support.appendingPathComponent("fit-modes.json")
 
     static func prepare() {
         for dir in [thumbs, support] {
@@ -54,7 +58,7 @@ enum Analyzer {
         let palette = Palette.analyze(thumb)
         return WallpaperInfo(width: Int(size.width), height: Int(size.height),
                              scheme: palette.scheme, hue: palette.hue, lightness: palette.lightness,
-                             edge: palette.edge)
+                             edge: palette.edge, path: wp.url.path)
     }
 
     static func pixelSize(_ source: CGImageSource) -> CGSize? {

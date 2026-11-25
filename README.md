@@ -40,7 +40,9 @@ This builds `WallpaperPicker.app`, copies it to `~/Applications`, adds a
 `wallpaper-picker` command to `~/.local/bin`, and (re)starts the app.
 
 The app lives in the menu bar and has no Dock icon. Open the picker with **⌃⌥W**,
-from the menu bar icon, or by opening the app again.
+from the menu bar icon, or by opening the app again. To use another shortcut,
+pick one under **Shortcut** in the menu bar, or set any with
+`wallpaper-picker --hotkey=cmd+shift+space`.
 
 ## Choosing the wallpaper folder
 
@@ -54,15 +56,45 @@ The app remembers the folder. If the app is running, it switches to the new
 folder straight away; if not, the command starts it. You can also use
 **Choose Folder…** in the menu bar.
 
-It reads jpg, png, heic, webp, gif and tiff files. New files show up while the
-app is running. Thumbnails and colours are cached in `~/Library/Caches/WallpaperPicker`.
+It reads jpg, png, heic, webp, gif and tiff files, in the folder and in its
+subfolders. New files show up while the app is running. Thumbnails and colours
+are cached in `~/Library/Caches/WallpaperPicker`.
+
+Favourites and fit modes are kept for each folder. They go by the file's name
+and place in the folder, so renaming or moving a file loses its favourite and
+fit mode.
+
+### Subfolders as collections
+
+Each subfolder of the wallpaper folder is a collection. **Folders** at the top
+of the picker lists them, and `Tab` steps through All, Favourites and each
+collection in turn. Images in deeper folders belong to the subfolder they're in.
+
+## Changing the wallpaper by itself
+
+**Change Wallpaper** in the menu bar sets a random wallpaper every 15 minutes,
+hour, 3 hours or day, from everything or only the favourites. It doesn't repeat
+one shown lately, and it waits while the picker is open. **Next Wallpaper** changes
+it straight away.
+
+## Command line
 
 ```
-wallpaper-picker [--dir=PATH] [--show]
-  --dir=PATH   Take wallpapers from PATH (remembered; ~ works, also in quotes)
-  --show       Open the picker
-  --help       Show this help
+wallpaper-picker [--dir=PATH] [--show] [--set=FILE | --random [--favourites]]
+                 [--rotate=INTERVAL] [--hotkey=KEYS]
+  --dir=PATH         Take wallpapers from PATH (remembered; ~ works, also in quotes)
+  --show             Open the picker
+  --set=FILE         Set FILE as the wallpaper
+  --random           Set a random wallpaper (not one shown lately)
+  --favourites       With --random: only from the favourites
+  --rotate=INTERVAL  Change the wallpaper by itself: off, 15m, 1h, 3h or 1d
+  --hotkey=KEYS      The shortcut that opens the picker, e.g. ctrl+opt+w,
+                     cmd+shift+space or f5
+  --help             Show this help
 ```
+
+The commands go to the running app, or start it. `--random` and `--set` work
+from Shortcuts, Raycast, cron or a launchd job as well as from a terminal.
 
 ## Keys
 
@@ -75,7 +107,7 @@ wallpaper-picker [--dir=PATH] [--show]
 | `R` | random |
 | `M` | fit: fill → fit → stretch → center (remembered per wallpaper) |
 | `Space` | hold to peek, tap to toggle |
-| `Tab` | all / favourites |
+| `Tab` | all → favourites → each subfolder |
 | `Home` `End` `PgUp` `PgDn` | jump |
 | `Esc` | close |
 
@@ -100,16 +132,21 @@ before you set it. Tile isn't offered: macOS has no public way for apps to set i
 ```sh
 ./dev.sh                  # debug build, run from here, open the picker
 ./dev.sh --dir=~/folder   # with another folder (kept separate from the installed app)
+./test.sh                 # the tests (Swift Testing; Command Line Tools are enough)
 ./bundle.sh --install     # install when happy
 ```
 
-Quit the installed app before `./dev.sh`, or both copies will want ⌃⌥W.
+Quit the installed app before `./dev.sh`, or both copies will want ⌃⌥W. The two
+keep separate settings but share the favourites, fit modes and caches in
+`~/Library/Application Support/WallpaperPicker` and `~/Library/Caches/WallpaperPicker`.
 
 | File | What's in it |
 |---|---|
 | `main.swift`, `Options.swift` | command line, handing commands to the running app |
-| `App.swift` | menu bar, global hotkey, the full-screen panel |
-| `Library.swift` | the folder: scanning, watching, favourites, analysis queue |
+| `App.swift` | menu bar, global hotkey, the full-screen panel, commands |
+| `HotKeySpec.swift` | the shortcut: parsing `ctrl+opt+w`, showing ⌃⌥W |
+| `Library.swift` | the folder and subfolders: scanning, watching, favourites, setting the wallpaper, analysis and cache upkeep |
+| `Rotation.swift` | changing the wallpaper by itself, Next, `--random` |
 | `Images.swift` | thumbnails, previews, caches |
 | `ColorScience.swift` | Lab colour, seed extraction, the tonal scheme |
 | `Motion.swift` | display-linked animation of the deck |

@@ -10,5 +10,10 @@ let package = Package(
             path: "Sources/WallpaperPicker",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        .testTarget(
+            name: "WallpaperPickerTests",
+            dependencies: ["WallpaperPicker"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
     ]
 )

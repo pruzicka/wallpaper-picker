@@ -23,17 +23,13 @@ if inBundle && options.isCommand && !options.run {
     let others = NSRunningApplication.runningApplications(withBundleIdentifier: AppInfo.bundleID)
         .filter { $0.processIdentifier != getpid() }
     if !others.isEmpty {
-        var info: [String: String] = [:]
-        if let folder = options.folder { info["dir"] = folder.path }
-        if options.show { info["show"] = "1" }
         DistributedNotificationCenter.default().postNotificationName(
-            AppInfo.commandNotification, object: nil, userInfo: info, deliverImmediately: true)
+            AppInfo.commandNotification, object: nil, userInfo: options.command, deliverImmediately: true)
         // Give the notification a moment to leave before exiting.
         RunLoop.current.run(until: Date().addingTimeInterval(0.2))
     } else {
-        if let folder = options.folder { UserDefaults.standard.set(folder.path, forKey: "folder") }
         let config = NSWorkspace.OpenConfiguration()
-        config.arguments = ["--run"] + (options.show ? ["--show"] : [])
+        config.arguments = ["--run"] + options.launchArguments
         config.activates = false
         let done = DispatchSemaphore(value: 0)
         NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: config) { _, error in
@@ -43,17 +39,21 @@ if inBundle && options.isCommand && !options.run {
         done.wait()
     }
     if let folder = options.folder { print("Wallpaper folder: \(folder.path)") }
+    if let file = options.setFile { print("Wallpaper: \(file.path)") }
+    if let rotate = options.rotate { print("Changes by itself: \(rotate.label.lowercased())") }
+    if let hotkey = options.hotkey { print("Shortcut: \(hotkey.display)") }
     exit(0)
 }
 
-// The app itself (or a development build run straight from .build).
+// The app itself (or a development build run straight from .build). The
+// folder is read before anything else starts.
 if let folder = options.folder {
     UserDefaults.standard.set(folder.path, forKey: "folder")
 }
 
 MainActor.assumeIsolated {
     let app = NSApplication.shared
-    let delegate = AppDelegate(show: options.show)
+    let delegate = AppDelegate(command: options.command)
     app.delegate = delegate
     app.setActivationPolicy(.accessory)
     app.run()

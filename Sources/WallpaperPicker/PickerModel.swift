@@ -21,8 +21,10 @@ enum SortMode: String, CaseIterable {
     }
 }
 
-enum Source {
+enum Source: Hashable {
     case all, favourites
+    // A subfolder of the wallpaper folder.
+    case collection(String)
 }
 
 // The hand of cards: its geometry, in the original's design pixels
@@ -147,6 +149,8 @@ final class PickerModel {
 
     @ObservationIgnored var onClose: (() -> Void)?
     @ObservationIgnored var onChooseFolder: (() -> Void)?
+    // A wallpaper was set from the picker.
+    @ObservationIgnored var onApplied: ((Wallpaper) -> Void)?
 
     @ObservationIgnored private var peekHeld = false
     @ObservationIgnored private var peekKept = false
@@ -225,8 +229,10 @@ final class PickerModel {
 
     private func ordered() -> [Wallpaper] {
         var list = library.items
-        if source == .favourites {
-            list = list.filter(library.isFavourite)
+        switch source {
+        case .all: break
+        case .favourites: list = list.filter(library.isFavourite)
+        case .collection(let name): list = list.filter { $0.collection == name }
         }
         switch sort {
         case .name:
@@ -257,6 +263,10 @@ final class PickerModel {
     }
 
     private func libraryChanged() {
+        // A subfolder that has gone (or emptied) leaves everything.
+        if case .collection(let name) = source, !library.collections.contains(name) {
+            source = .all
+        }
         guard isOpen else { return }
         rebuild(keep: front)
     }
@@ -318,38 +328,12 @@ final class PickerModel {
     func applyFront() {
         guard let wp = front else { return }
         do {
-            try apply(wp)
+            try library.apply(wp)
+            onApplied?(wp)
             notice = nil
         } catch {
             say("Couldn't set the wallpaper: \(error.localizedDescription)", error: true)
         }
-    }
-
-    private func apply(_ wp: Wallpaper) throws {
-        let mode = library.fitMode(wp)
-        var options: [NSWorkspace.DesktopImageOptionKey: Any] = [:]
-        switch mode {
-        case .fill:
-            options[.imageScaling] = NSImageScaling.scaleProportionallyUpOrDown.rawValue
-            options[.allowClipping] = true
-        case .fit:
-            options[.imageScaling] = NSImageScaling.scaleProportionallyUpOrDown.rawValue
-            options[.allowClipping] = false
-        case .stretch:
-            options[.imageScaling] = NSImageScaling.scaleAxesIndependently.rawValue
-            options[.allowClipping] = true
-        case .center:
-            options[.imageScaling] = NSImageScaling.scaleNone.rawValue
-            options[.allowClipping] = true
-        }
-        if mode.showsEdge {
-            let edge = library.edgeColor(wp)
-            options[.fillColor] = NSColor(srgbRed: edge.r, green: edge.g, blue: edge.b, alpha: 1)
-        }
-        for screen in NSScreen.screens {
-            try NSWorkspace.shared.setDesktopImageURL(wp.url, for: screen, options: options)
-        }
-        library.markCurrent(wp)
     }
 
     // Fill → Fit → Stretch → Center for the card in front. On the desktop
@@ -363,7 +347,7 @@ final class PickerModel {
     func setFitMode(_ mode: FitMode, for wp: Wallpaper) {
         library.setFitMode(mode, for: wp)
         if library.isCurrent(wp) {
-            do { try apply(wp) } catch { say("Couldn't set the wallpaper: \(error.localizedDescription)", error: true) }
+            do { try library.apply(wp) } catch { say("Couldn't set the wallpaper: \(error.localizedDescription)", error: true) }
         }
     }
 
@@ -450,6 +434,29 @@ final class PickerModel {
         }
     }
 
+    // A menu of the subfolders, at the pointer.
+    func chooseCollection() {
+        let menu = NSMenu()
+        for name in library.collections {
+            let count = library.items.filter { $0.collection == name }.count
+            let item = MenuAction.item("\(name)  \(count)") { [weak self] in self?.setSource(.collection(name)) }
+            item.state = source == .collection(name) ? .on : .off
+            item.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
+            menu.addItem(item)
+        }
+        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+    }
+
+    // Tab: everything, the favourites, then each subfolder.
+    var sources: [Source] {
+        [.all, .favourites] + library.collections.map(Source.collection)
+    }
+
+    func cycleSource() {
+        let all = sources
+        setSource(all[((all.firstIndex(of: source) ?? 0) + 1) % all.count])
+    }
+
     func random() {
         guard displayed.count > 1 else { return }
         var i = currentIndex
@@ -494,7 +501,7 @@ final class PickerModel {
                 peekHeld = true
                 updatePeek()
             }
-        case 48: setSource(source == .all ? .favourites : .all) // tab
+        case 48: cycleSource() // tab
         default:
             switch e.charactersIgnoringModifiers?.lowercased() {
             case "f": toggleFavourite()
@@ -543,5 +550,24 @@ final class PickerModel {
             let d = dy != 0 ? dy : -dx
             if d != 0 { step(d > 0 ? -1 : 1) }
         }
+    }
+}
+
+// A menu item that runs a closure.
+final class MenuAction: NSObject {
+    private let action: () -> Void
+
+    private init(_ action: @escaping () -> Void) {
+        self.action = action
+    }
+
+    @objc private func run() { action() }
+
+    static func item(_ title: String, action: @escaping () -> Void) -> NSMenuItem {
+        let target = MenuAction(action)
+        let item = NSMenuItem(title: title, action: #selector(run), keyEquivalent: "")
+        item.target = target
+        item.representedObject = target // menu items don't keep their targets
+        return item
     }
 }
